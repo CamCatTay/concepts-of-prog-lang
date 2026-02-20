@@ -9,7 +9,10 @@ class Token(Enum):
     DIGIT = auto()
 
     # literals
-    INT_LITERAL = auto()
+    INTEGER_LITERAL = auto()
+    FLOAT_LITERAL = auto()
+    STRING_LITERAL = auto()
+    CHARACTER_LITERAL = auto()
 
     # identifiers
     IDENTIFIER = auto() # names (variable, function, class, ect...)
@@ -29,13 +32,11 @@ class Token(Enum):
     LEFT_BRACKET = auto()
     RIGHT_BRACKET = auto()
 
-    #
+    # separators
     DOT = auto()
     COMMA = auto()
     APOSTROPHE = auto()
     QUOTATION = auto()
-
-
     SEMICOLON = auto()
     COLON = auto()
 
@@ -61,8 +62,6 @@ KEYWORDS = {
     "out": Token.KEYWORD_OUT
     "def": Token.KEYWORD_FUNCTION
 }
-
-
 
 # open input file and read through each character
 def main():
