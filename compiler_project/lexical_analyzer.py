@@ -1,10 +1,7 @@
 from enum import Enum, auto
 
-class Token(Enum):
 
-    # offset token id's to separate them from char class id's
-    #def _generate_next_value_(name, start, count, last_values):
-    #    return count + 100
+class Token(Enum):
 
     # char classes
     EOF = -1
@@ -16,11 +13,11 @@ class Token(Enum):
     # literals
     INT_LITERAL = auto()
     FLOAT_LITERAL = auto()
-    STRING_LITERAL = auto()
-    CHAR_LITERAL = auto()
+    STRING_LITERAL = auto()   # double-quoted  "..."
+    CHAR_LITERAL = auto()     # single-quoted  '...'
 
     # identifiers
-    IDENTIFIER = auto() # names (variable, function, class, ect...)
+    IDENTIFIER = auto()
 
     # operators
     ASSIGN_OPERATOR = auto()
@@ -36,7 +33,6 @@ class Token(Enum):
     RIGHT_SQUARE_BRACKET = auto()
     LEFT_BRACKET = auto()
     RIGHT_BRACKET = auto()
-    #INDENTATION = auto() # 4 spaces = indentation (for python)
 
     # separators
     DOT = auto()
@@ -53,41 +49,60 @@ class Token(Enum):
     KEYWORD_VOID = auto()
     KEYWORD_SYSTEM = auto()
     KEYWORD_OUT = auto()
-    KEYWORD_FUNCTION = auto() # def
+    KEYWORD_FUNCTION = auto()  # def
+
+    # extra keywords needed for the Java file
+    KEYWORD_INT = auto()
+    KEYWORD_STRING = auto()
+    KEYWORD_PRINTLN = auto()
+    KEYWORD_MAIN = auto()
 
 
-#example: if there is public token return it otherwise return IDENTIFIER
-#lexeme = "public"
-#token_type = KEYWORDS.get(lexeme, TokenType.IDENTIFIER)
 KEYWORDS = {
-    "public": Token.KEYWORD_PUBLIC,
-    "class": Token.KEYWORD_CLASS,
-    "static": Token.KEYWORD_STATIC,
-    "void": Token.KEYWORD_VOID,
-    "system": Token.KEYWORD_SYSTEM,
-    "out": Token.KEYWORD_OUT,
-    "def": Token.KEYWORD_FUNCTION,
+    "public":   Token.KEYWORD_PUBLIC,
+    "class":    Token.KEYWORD_CLASS,
+    "static":   Token.KEYWORD_STATIC,
+    "void":     Token.KEYWORD_VOID,
+    "System":   Token.KEYWORD_SYSTEM,
+    "out":      Token.KEYWORD_OUT,
+    "def":      Token.KEYWORD_FUNCTION,
+    "int":      Token.KEYWORD_INT,
+    "String":   Token.KEYWORD_STRING,
+    "println":  Token.KEYWORD_PRINTLN,
+    "main":     Token.KEYWORD_MAIN,
 }
 
-# using globals was annoying and passing vars was making
-# code hard to read so I opted to use a class instead
+
 class Lexer:
-    def __init__(self):
+    def __init__(self, source: str):
+        self.source = source          # full source text
+        self.pos = 0                  # current read position
+        self.next_char = ""
         self.char_class = None
-        self.next_char = None
-        self.lexeme = None
-        self.lex_length = None
-        self.token = None
+        self.lexeme = ""
         self.next_token = None
+        self.tokens: list[tuple[Token, str]] = []
 
-    def get_char(self, char):
+        self._advance()
 
-        self.next_char = char
+    # helpers
 
+    def _advance(self):
+        """Read the next character from source and classify it."""
+        if self.pos < len(self.source):
+            self.next_char = self.source[self.pos]
+            self.pos += 1
+        else:
+            self.next_char = ""
+
+        self.get_char(self.next_char)
+
+    def get_char(self, char: str):
+        """Set char_class based on the character."""
         if not char:
             self.char_class = Token.EOF
             self.next_token = Token.EOF
-        elif char.isalpha():
+        elif char.isalpha() or char == "_":
             self.char_class = Token.LETTER
         elif char.isdigit():
             self.char_class = Token.DIGIT
@@ -96,93 +111,163 @@ class Lexer:
         else:
             self.char_class = Token.UNKNOWN
 
-# file to parse
-file_path = "test_files/python_add_numbers.py"
+    def add_char(self):
+        """Append the current character to the lexeme."""
+        self.lexeme += self.next_char
 
-# functions
+    def get_non_blank(self):
+        """Skip whitespace (spaces, tabs, newlines)."""
+        while self.next_char in (" ", "\t", "\n", "\r"):
+            self._advance()
 
-# when there is a space this is called to find indentation
-def is_indentation(file):
-    return
+    def lookup(self, char: str) -> Token:
+        """Return the token for a single-character symbol."""
+        self.add_char()
+        mapping = {
+            "(": Token.LEFT_PARENTHESIS,
+            ")": Token.RIGHT_PARENTHESIS,
+            "[": Token.LEFT_SQUARE_BRACKET,
+            "]": Token.RIGHT_SQUARE_BRACKET,
+            "{": Token.LEFT_BRACKET,
+            "}": Token.RIGHT_BRACKET,
+            "+": Token.ADDITION_OPERATOR,
+            "-": Token.SUBTRACTION_OPERATOR,
+            "*": Token.MULTIPLICATION_OPERATOR,
+            "/": Token.DIVISION_OPERATOR,
+            "=": Token.ASSIGN_OPERATOR,
+            ".": Token.DOT,
+            ",": Token.COMMA,
+            ";": Token.SEMICOLON,
+            ":": Token.COLON,
+        }
+        return mapping.get(char, Token.UNKNOWN)
 
-def add_char():
-    return
+    # string / char literal helpers
 
-# get_char - gets next character in file and sets character class based on result
+    def _read_string_literal(self, quote_char: str) -> Token:
+        """Read everything up to the closing quote_char.
+        The opening quote is already in self.lexeme before this is called."""
+        while self.next_char and self.next_char != quote_char:
+            self.add_char()
+            self._advance()
+        # read closing quote
+        self.add_char()   # add the closing quote
+        self._advance()   # move past it
+        return Token.STRING_LITERAL if quote_char == '"' else Token.CHAR_LITERAL
+
+    # core lex method returns one (Token, lexeme) pair
+
+    def lex(self) -> tuple[Token, str] | None:
+        """Scan and return the next token, or None at EOF."""
+        self.get_non_blank()
+        self.lexeme = ""
+
+        match self.char_class:
+
+            case Token.EOF:
+                self.next_token = Token.EOF
+                return None
+
+            # identifiers & keywords
+            case Token.LETTER:
+                self.add_char()
+                self._advance()
+                while self.char_class in (Token.LETTER, Token.DIGIT):
+                    self.add_char()
+                    self._advance()
+                self.next_token = KEYWORDS.get(self.lexeme, Token.IDENTIFIER)
+
+            # integer (or float) literals
+            case Token.DIGIT:
+                self.add_char()
+                self._advance()
+                while self.char_class == Token.DIGIT:
+                    self.add_char()
+                    self._advance()
+                if self.next_char == ".":
+                    self.add_char()
+                    self._advance()
+                    while self.char_class == Token.DIGIT:
+                        self.add_char()
+                        self._advance()
+                    self.next_token = Token.FLOAT_LITERAL
+                else:
+                    self.next_token = Token.INT_LITERAL
+
+            # unknown / symbols
+            case Token.UNKNOWN:
+                char = self.next_char
+
+                # double-quoted string  "..."
+                if char == '"':
+                    self.add_char()   # include opening "
+                    self._advance()   # move past it
+                    self.next_token = self._read_string_literal('"')
+
+                # single-quoted string/char  '...'
+                elif char == "'":
+                    self.add_char()   # include opening '
+                    self._advance()   # move past it
+                    self.next_token = self._read_string_literal("'")
+
+                # skip comments:  # ... (Python)  or  // ... (Java)
+                elif char == "#":
+                    while self.next_char and self.next_char != "\n":
+                        self._advance()
+                    return self.lex()   # recurse to get next real token
+
+                elif char == "/" and self.pos < len(self.source) and self.source[self.pos] == "/":
+                    while self.next_char and self.next_char != "\n":
+                        self._advance()
+                    return self.lex()
+
+                else:
+                    self.next_token = self.lookup(char)
+                    self._advance()
+
+            case Token.TAB:
+                # treat tab as whitespace and move on
+                # test file does not use indent / dedent in any meaningful way
+                # so tabs can be ignored (behavior will need to change if test files become more complex)
+                self._advance()
+                return self.lex()
+
+            case _:
+                self.next_token = Token.UNKNOWN
+                self._advance()
+
+        return (self.next_token, self.lexeme)
+
+    # tokenize the entire source
+
+    def tokenize(self) -> list[tuple[Token, str]]:
+        """Walk the source and collect every token."""
+        self.tokens = []
+        while True:
+            result = self.lex()
+            if result is None or result[0] == Token.EOF:
+                break
+            self.tokens.append(result)
+        return self.tokens
 
 
-def get_non_blank():
-
-    return
-
-def lex():
-    global lex_length
-
-    match(char_class):
-
-        case Token.EOF:
-            return
-
-        case Token.LETTER:
-            return
-
-        case Token.DIGIT:
-            return
-
-        case Token.TAB:
-            return
-
-        case Token.UNKNOWN:
-            return
-
-
-
-def lookup(char):
-    match(char):
-        case "(":
-            add_char()
-            next_token = Token.LEFT_PARENTHESIS
-
-        case ")":
-            add_char()
-            next_token = Token.RIGHT_PARENTHESIS
-
-        case "+":
-            add_char()
-            next_token = Token.ADDITION_OPERATOR
-
-        case "-":
-            add_char()
-            next_token = Token.SUBTRACTION_OPERATOR
-
-        case "*":
-            add_char()
-            next_token = Token.MULTIPLICATION_OPERATOR
-
-        case "/":
-            add_char()
-            next_token = Token.DIVISION_OPERATOR
-
-        case _:
-            add_char()
-            next_token = Token.EOF
-
-
-
-# open input file and read through each char
-def main():
+# tokenize file and print results
+def tokenize_file(path: str):
+    print(f"\n{'='*60}")
+    print(f"  FILE: {path}")
+    print(f"{'='*60}")
     try:
-        with open(file_path, "r") as file:
-
-            lexer = Lexer
-
-            while lexer.next_token != Token.EOF:
-                char = file.read(1)
-                get_char(char)
-                lex()
-
+        with open(path, "r") as f:
+            source = f.read()
+        lexer = Lexer(source)
+        tokens = lexer.tokenize()
+        for token, lexeme in tokens:
+            print(f"  {token.name:<30} |  {repr(lexeme)}")
+        print(f"\n  Total tokens: {len(tokens)}")
     except FileNotFoundError:
-        print(f"Error: '{file_path}' not found")
+        print(f"  Error: '{path}' not found.")
 
-# initialize
-main()
+# tokenizes both files if this program is ran directly
+if __name__ == "__main__":
+    tokenize_file("test_files/python_add_numbers.py")
+    tokenize_file("test_files/java_add_numbers.java")
